@@ -1,0 +1,477 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USUARIOS ────────────────────────────────────────────────────────────────
+enum Rol {
+  CLIENTE
+  ANALISTA
+  ADMIN
+  INVERSIONISTA
+}
+
+enum EstadoUsuario {
+  PENDIENTE_VERIFICACION
+  ACTIVO
+  SUSPENDIDO
+  BLOQUEADO
+}
+
+enum TipoDocumento {
+  CEDULA
+  CEDULA_EXTRANJERIA
+  NIT
+  PASAPORTE
+}
+
+enum PerfilInversion {
+  CONSERVADOR
+  MODERADO
+  AGRESIVO
+}
+
+model Usuario {
+  id               String         @id @default(uuid())
+  primerNombre     String
+  segundoNombre    String?
+  primerApellido   String
+  segundoApellido  String?
+  tipoDocumento    TipoDocumento
+  numDocumento     String         @unique
+  email            String         @unique
+  telefono         String
+  direccion        String?
+  fechaNacimiento  DateTime
+  usuario          String         @unique
+  passwordHash     String
+  rol              Rol            @default(CLIENTE)
+  estado           EstadoUsuario  @default(PENDIENTE_VERIFICACION)
+  perfilInversion  PerfilInversion?
+  scoreTest        Int?
+  kycValidado      Boolean        @default(false)
+  firmaDigital     String?
+  terminosAcept    Boolean        @default(false)
+  datosAcept       Boolean        @default(false)
+  sarlaftOk        Boolean        @default(false)
+  ip               String?
+  dispositivo      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  solicitudes      Solicitud[]
+  obligaciones     Obligacion[]
+  pagos            Pago[]
+  notificaciones   Notificacion[]
+  auditLogs        AuditLog[]     @relation("UsuarioAccion")
+  inversion        Inversion?
+  documentos       Documento[]
+  otps             OTP[]
+
+  @@map("usuarios")
+}
+
+// ─── OTP ─────────────────────────────────────────────────────────────────────
+model OTP {
+  id        String   @id @default(uuid())
+  usuarioId String
+  codigo    String
+  tipo      String   // LOGIN | FIRMA | REGISTRO
+  usado     Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@map("otps")
+}
+
+// ─── DOCUMENTOS ──────────────────────────────────────────────────────────────
+enum TipoDocumentoArchivo {
+  CEDULA
+  SELFIE
+  FIRMA
+  SOPORTE_INGRESOS
+  CERT_TRADICION
+  AVALUO
+  SOPORTE_VEHICULO
+  OTRO
+}
+
+model Documento {
+  id          String               @id @default(uuid())
+  usuarioId   String
+  solicitudId String?
+  tipo        TipoDocumentoArchivo
+  nombre      String
+  url         String
+  validado    Boolean              @default(false)
+  createdAt   DateTime             @default(now())
+  usuario     Usuario              @relation(fields: [usuarioId], references: [id])
+  solicitud   Solicitud?           @relation(fields: [solicitudId], references: [id])
+
+  @@map("documentos")
+}
+
+// ─── INVENTARIO ───────────────────────────────────────────────────────────────
+enum EstadoInventario {
+  DISPONIBLE
+  RESERVADO
+  VENDIDO
+  EN_LEASING
+}
+
+enum TipoVehiculo {
+  PARTICULAR
+  SUV
+  CAMIONETA
+  MOTO
+  COMERCIAL
+}
+
+model Vehiculo {
+  id          String           @id @default(uuid())
+  nombre      String
+  marca       String
+  linea       String
+  anio        Int
+  color       String
+  vin         String           @unique
+  km          Int              @default(0)
+  valor       Decimal          @db.Decimal(18, 2)
+  tipo        TipoVehiculo
+  estado      EstadoInventario @default(DISPONIBLE)
+  imagenes    String[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  solicitudes Solicitud[]
+
+  @@map("vehiculos")
+}
+
+enum TipoInmueble {
+  VIVIENDA
+  LOCAL_COMERCIAL
+  OFICINA
+  BODEGA
+}
+
+model Inmueble {
+  id           String           @id @default(uuid())
+  nombre       String
+  direccion    String
+  municipio    String
+  matricula    String           @unique
+  area         Decimal          @db.Decimal(10, 2)
+  areaPrivada  Decimal          @db.Decimal(10, 2)
+  estrato      String
+  tipo         TipoInmueble
+  valor        Decimal          @db.Decimal(18, 2)
+  estado       EstadoInventario @default(DISPONIBLE)
+  imagenes     String[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  solicitudes  Solicitud[]
+
+  @@map("inmuebles")
+}
+
+// ─── SOLICITUDES ─────────────────────────────────────────────────────────────
+enum TipoProducto {
+  CREDITO_VEHICULAR
+  LEASING_OPERATIVO
+  LEASING_FINANCIERO
+  LEASING_INMOBILIARIO
+  PRESTAMO_LIBRE_INVERSION
+  PRESTAMO_CONSUMO
+  PRESTAMO_CAPITAL_TRABAJO
+  COMPRAVENTA_CONTADO
+  COMPRAVENTA_FINANCIADA
+}
+
+enum EstadoSolicitud {
+  BORRADOR
+  RADICADA
+  EN_ANALISIS
+  DOCUMENTACION_PENDIENTE
+  PENDIENTE_DECISION
+  APROBADA
+  APROBADA_CON_CONDICIONES
+  RECHAZADA
+  DESEMBOLSADA
+  BLOQUEADA_CUMPLIMIENTO
+  ACTIVA
+}
+
+model Solicitud {
+  id              String          @id @default(uuid())
+  radicado        String          @unique
+  usuarioId       String
+  tipo            TipoProducto
+  estado          EstadoSolicitud @default(BORRADOR)
+  monto           Decimal         @db.Decimal(18, 2)
+  cuotaInicial    Decimal?        @db.Decimal(18, 2)
+  plazo           Int?
+  tasaMensual     Decimal?        @db.Decimal(8, 4)
+  cuotaEstimada   Decimal?        @db.Decimal(18, 2)
+  totalPagar      Decimal?        @db.Decimal(18, 2)
+  valorResidual   Decimal?        @db.Decimal(18, 2)
+  destino         String?
+  vehiculoId      String?
+  inmuebleId      String?
+  analistaId      String?
+  motivoDecision  String?
+  consentimientoCR Boolean        @default(false)
+  sarlaftOk       Boolean?
+  scoreCredito    Int?
+  ingresosMes     Decimal?        @db.Decimal(18, 2)
+  egresosMes      Decimal?        @db.Decimal(18, 2)
+  otrasObligaciones Decimal?      @db.Decimal(18, 2)
+  activos         Decimal?        @db.Decimal(18, 2)
+  pasivos         Decimal?        @db.Decimal(18, 2)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  usuario         Usuario         @relation(fields: [usuarioId], references: [id])
+  vehiculo        Vehiculo?       @relation(fields: [vehiculoId], references: [id])
+  inmueble        Inmueble?       @relation(fields: [inmuebleId], references: [id])
+  obligacion      Obligacion?
+  documentos      Documento[]
+  seguros         SeguroSolicitud[]
+  auditLogs       AuditLog[]      @relation("SolicitudLog")
+
+  @@map("solicitudes")
+}
+
+// ─── SEGUROS ──────────────────────────────────────────────────────────────────
+enum TipoSeguro {
+  VIDA_DEUDORES
+  DESEMPLEO
+  ACCIDENTES_PERSONALES
+  GARANTIA_CAUCION
+}
+
+model SeguroSolicitud {
+  id          String      @id @default(uuid())
+  solicitudId String
+  tipo        TipoSeguro
+  pct         Decimal     @db.Decimal(6, 3)
+  primaEstimada Decimal   @db.Decimal(18, 2)
+  activo      Boolean     @default(true)
+  obligatorio Boolean     @default(false)
+  solicitud   Solicitud   @relation(fields: [solicitudId], references: [id])
+
+  @@map("seguros_solicitud")
+}
+
+// ─── OBLIGACIONES ────────────────────────────────────────────────────────────
+enum EstadoObligacion {
+  AL_DIA
+  PROXIMA_A_VENCER
+  EN_MORA
+  REESTRUCTURADA
+  CANCELADA
+  EN_COBRO_JUDICIAL
+}
+
+model Obligacion {
+  id            String           @id @default(uuid())
+  usuarioId     String
+  solicitudId   String           @unique
+  tipo          String
+  descripcion   String
+  saldo         Decimal          @db.Decimal(18, 2)
+  cuota         Decimal          @db.Decimal(18, 2)
+  tasaMensual   Decimal          @db.Decimal(8, 4)
+  plazoTotal    Int
+  cuotasPagadas Int              @default(0)
+  proximoVenc   DateTime
+  estado        EstadoObligacion @default(AL_DIA)
+  diasMora      Int              @default(0)
+  interesMora   Decimal          @default(0) @db.Decimal(18, 2)
+  provision     Decimal          @default(0) @db.Decimal(18, 2)
+  debitoAuto    Boolean          @default(false)
+  cuentaBanco   String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  usuario       Usuario          @relation(fields: [usuarioId], references: [id])
+  solicitud     Solicitud        @relation(fields: [solicitudId], references: [id])
+  pagos         Pago[]
+  cuotasAmort   CuotaAmortizacion[]
+
+  @@map("obligaciones")
+}
+
+// ─── AMORTIZACIÓN ────────────────────────────────────────────────────────────
+model CuotaAmortizacion {
+  id            String     @id @default(uuid())
+  obligacionId  String
+  numeroCuota   Int
+  saldoInicial  Decimal    @db.Decimal(18, 2)
+  cuotaTotal    Decimal    @db.Decimal(18, 2)
+  interes       Decimal    @db.Decimal(18, 2)
+  capital       Decimal    @db.Decimal(18, 2)
+  saldoFinal    Decimal    @db.Decimal(18, 2)
+  fechaVenc     DateTime
+  pagada        Boolean    @default(false)
+  fechaPago     DateTime?
+  obligacion    Obligacion @relation(fields: [obligacionId], references: [id])
+
+  @@map("cuotas_amortizacion")
+}
+
+// ─── PAGOS ───────────────────────────────────────────────────────────────────
+enum MedioPago {
+  PSE
+  TRANSFERENCIA
+  DEBITO_AUTOMATICO
+  EFECTIVO
+  TARJETA_DEBITO
+  TARJETA_CREDITO
+  QR_TRANSFIYA
+}
+
+enum EstadoPago {
+  PENDIENTE
+  CONFIRMADO
+  FALLIDO
+  REVERTIDO
+}
+
+model Pago {
+  id           String     @id @default(uuid())
+  usuarioId    String
+  obligacionId String
+  monto        Decimal    @db.Decimal(18, 2)
+  montoCap     Decimal    @db.Decimal(18, 2)
+  montoInt     Decimal    @db.Decimal(18, 2)
+  montoMora    Decimal    @default(0) @db.Decimal(18, 2)
+  medio        MedioPago
+  estado       EstadoPago @default(PENDIENTE)
+  referencia   String?
+  comprobante  String?
+  ip           String?
+  createdAt    DateTime   @default(now())
+  confirmedAt  DateTime?
+
+  usuario      Usuario    @relation(fields: [usuarioId], references: [id])
+  obligacion   Obligacion @relation(fields: [obligacionId], references: [id])
+
+  @@map("pagos")
+}
+
+// ─── FONDO / INVERSIONES ──────────────────────────────────────────────────────
+enum ModalidadRendimiento {
+  FIJO
+  VARIABLE
+  MIXTO
+}
+
+enum EstadoInversion {
+  EN_PROCESO
+  ACTIVA
+  SUSPENDIDA
+  TERMINADA
+}
+
+model Inversion {
+  id              String               @id @default(uuid())
+  usuarioId       String               @unique
+  perfil          PerfilInversion
+  modalidad       ModalidadRendimiento
+  montoInicial    Decimal              @db.Decimal(18, 2)
+  saldoActual     Decimal              @db.Decimal(18, 2)
+  tasaFija        Decimal?             @db.Decimal(8, 4)
+  plazoMeses      Int
+  pctDelegada     Int                  @default(70)
+  pctDirigida     Int                  @default(30)
+  reinversion     Boolean              @default(false)
+  periodicidad    String               @default("MENSUAL")
+  estado          EstadoInversion      @default(EN_PROCESO)
+  rendAcumulado   Decimal              @default(0) @db.Decimal(18, 2)
+  ultimoCorte     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  usuario         Usuario              @relation(fields: [usuarioId], references: [id])
+  rendimientos    Rendimiento[]
+
+  @@map("inversiones")
+}
+
+model Rendimiento {
+  id           String    @id @default(uuid())
+  inversionId  String
+  periodo      String
+  rendBruto    Decimal   @db.Decimal(18, 2)
+  comision     Decimal   @db.Decimal(18, 2)
+  cuotaManejo  Decimal   @db.Decimal(18, 2)
+  retencion    Decimal   @db.Decimal(18, 2)
+  rendNeto     Decimal   @db.Decimal(18, 2)
+  distribuido  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  inversion    Inversion @relation(fields: [inversionId], references: [id])
+
+  @@map("rendimientos")
+}
+
+// ─── NOTIFICACIONES ──────────────────────────────────────────────────────────
+enum TipoNotificacion {
+  MORA
+  VENCIMIENTO
+  SOLICITUD
+  PAGO
+  SISTEMA
+  SARLAFT
+}
+
+model Notificacion {
+  id        String           @id @default(uuid())
+  usuarioId String
+  tipo      TipoNotificacion
+  titulo    String
+  mensaje   String
+  leida     Boolean          @default(false)
+  canal     String[]         // EMAIL | SMS | PUSH | APP
+  createdAt DateTime         @default(now())
+
+  usuario   Usuario          @relation(fields: [usuarioId], references: [id])
+
+  @@map("notificaciones")
+}
+
+// ─── AUDIT LOG (INMUTABLE) ───────────────────────────────────────────────────
+model AuditLog {
+  id          String     @id @default(uuid())
+  usuarioId   String?
+  solicitudId String?
+  accion      String
+  modulo      String
+  detalle     String
+  ip          String?
+  dispositivo String?
+  hash        String?
+  createdAt   DateTime   @default(now())
+
+  usuario     Usuario?   @relation("UsuarioAccion", fields: [usuarioId], references: [id])
+  solicitud   Solicitud? @relation("SolicitudLog", fields: [solicitudId], references: [id])
+
+  @@map("audit_log")
+}
+
+// ─── CONFIGURACIÓN DEL SISTEMA ───────────────────────────────────────────────
+model ConfigSistema {
+  id                String   @id @default(uuid())
+  clave             String   @unique
+  valor             String
+  descripcion       String?
+  updatedAt         DateTime @updatedAt
+  updatedBy         String?
+
+  @@map("config_sistema")
+}
