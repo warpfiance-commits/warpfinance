@@ -14,7 +14,8 @@ async function main() {
       primerNombre: 'Admin', primerApellido: 'Warp',
       email: 'admin@warpfinance.co', usuario: 'admin',
       numDocumento: '000000001', tipoDocumento: 'CEDULA',
-      passwordHash, rol: 'ADMIN', estado: 'ACTIVO',
+      telefono: '0000000000', passwordHash,
+      rol: 'ADMIN', estado: 'ACTIVO',
       terminosAcept: true, datosAcept: true,
     }
   })
@@ -26,7 +27,8 @@ async function main() {
       primerNombre: 'Cliente', primerApellido: 'Demo',
       email: 'cliente@warpfinance.co', usuario: 'cliente',
       numDocumento: '000000002', tipoDocumento: 'CEDULA',
-      passwordHash, rol: 'CLIENTE', estado: 'ACTIVO',
+      telefono: '0000000001', passwordHash,
+      rol: 'CLIENTE', estado: 'ACTIVO',
       terminosAcept: true, datosAcept: true,
     }
   })
