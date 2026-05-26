@@ -3,6 +3,6 @@ builder = "nixpacks"
 buildCommand = "npm install && npx prisma generate"
 
 [deploy]
-startCommand = npx prisma db push && node seed.js && node server.js
+startCommand = "npx prisma db push && node seed.js && node server.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
