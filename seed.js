@@ -8,14 +8,15 @@ async function main() {
 
   const passwordHash = await bcrypt.hash('123456', 12)
 
-  const admin = await prisma.usuario.upsert({
-    where: { usuario: 'admin' },
+  await prisma.usuario.upsert({
+    where: { email: 'admin@warpfinance.co' },
     update: {},
     create: {
       primerNombre: 'Admin',
       primerApellido: 'Warp',
       email: 'admin@warpfinance.co',
       usuario: 'admin',
+      numDocumento: '000000001',
       passwordHash,
       rol: 'ADMIN',
       estado: 'ACTIVO',
@@ -24,14 +25,15 @@ async function main() {
     }
   })
 
-  const cliente = await prisma.usuario.upsert({
-    where: { usuario: 'cliente' },
+  await prisma.usuario.upsert({
+    where: { email: 'cliente@warpfinance.co' },
     update: {},
     create: {
       primerNombre: 'Cliente',
       primerApellido: 'Demo',
       email: 'cliente@warpfinance.co',
       usuario: 'cliente',
+      numDocumento: '000000002',
       passwordHash,
       rol: 'CLIENTE',
       estado: 'ACTIVO',
@@ -40,7 +42,7 @@ async function main() {
     }
   })
 
-  console.log('Seed completado:', { admin: admin.usuario, cliente: cliente.usuario })
+  console.log('Seed completado OK')
 }
 
 main()
