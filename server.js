@@ -578,7 +578,49 @@ app.post('/api/v1/calc/amortizacion', (req, res) => {
   const { capital, tasaMensual, meses } = req.body
   res.json(calcAmort(capital, tasaMensual, meses))
 })
+// ── SOLICITUDES ──────────────────────────────────────────────────────────
+// Crear solicitud
+app.post('/api/v1/solicitudes', authMiddleware, async (req, res) => {
+  try {
+    const { tipo, monto, plazo, descripcion } = req.body
+    const radicado = `RAD-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`
+    const sol = await prisma.solicitud.create({
+      data: {
+        usuarioId: req.userId,
+        tipo: tipo || 'PRESTAMO',
+        monto: parseFloat(monto) || 0,
+        plazo: parseInt(plazo) || 12,
+        descripcion: descripcion || '',
+        radicado,
+        estado: 'RADICADA',
+      }
+    })
+    await audit({ usuarioId: req.userId, accion: 'SOLICITUD', modulo: 'SOLICITUDES', detalle: `Solicitud ${radicado}` })
+    res.json(sol)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
 
+// Solicitudes del cliente
+app.get('/api/v1/solicitudes/mias', authMiddleware, async (req, res) => {
+  try {
+    const sols = await prisma.solicitud.findMany({
+      where: { usuarioId: req.userId },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(sols)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+// Todas las solicitudes (admin)
+app.get('/api/v1/solicitudes', authMiddleware, async (req, res) => {
+  try {
+    const sols = await prisma.solicitud.findMany({
+      include: { usuario: { select: { primerNombre: true, primerApellido: true, numDocumento: true } } },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(sols)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
 // 404
 app.use((req, res) => res.status(404).json({ message: `Ruta no encontrada: ${req.method} ${req.path}` }))
 
