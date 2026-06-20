@@ -367,6 +367,13 @@ app.post('/api/v1/inventario/inmuebles', auth, adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.put('/api/v1/inventario/inmuebles/:id/reservar', auth, async (req, res) => {
+  try {
+    const i = await prisma.inmueble.update({ where: { id: req.params.id }, data: { estado: 'RESERVADO' } })
+    res.json(i)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 // ─── FONDO ────────────────────────────────────────────────────────────────────
 app.get('/api/v1/fondo/mi-inversion', auth, async (req, res) => {
   try {
