@@ -181,6 +181,28 @@ app.put('/api/v1/usuarios/:id/estado', auth, adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.put('/api/v1/usuarios/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const { primerNombre, segundoNombre, primerApellido, segundoApellido, email, telefono, direccion } = req.body
+    const user = await prisma.usuario.update({
+      where: { id: req.params.id },
+      data: { primerNombre, segundoNombre, primerApellido, segundoApellido, email, telefono, direccion }
+    })
+    res.json(user)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.put('/api/v1/usuarios/:id/kyc', auth, adminOnly, async (req, res) => {
+  try {
+    const { kycValidado, sarlaftOk } = req.body
+    const user = await prisma.usuario.update({
+      where: { id: req.params.id },
+      data: { kycValidado, sarlaftOk }
+    })
+    res.json(user)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 // ─── SOLICITUDES ──────────────────────────────────────────────────────────────
 app.post('/api/v1/solicitudes', auth, async (req, res) => {
   try {
@@ -302,6 +324,16 @@ app.get('/api/v1/obligaciones/:id', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.put('/api/v1/obligaciones/:id/extrajudicial', auth, adminOnly, async (req, res) => {
+  try {
+    const obl = await prisma.obligacion.update({
+      where: { id: req.params.id },
+      data: { estado: 'EN_COBRO_JUDICIAL' }
+    })
+    res.json(obl)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 // ─── PAGOS ───────────────────────────────────────────────────────────────────
 app.post('/api/v1/pagos', auth, async (req, res) => {
   try {
@@ -324,6 +356,31 @@ app.get('/api/v1/pagos/historial', auth, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     })
     res.json(pagos)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.post('/api/v1/pagos/manual', auth, adminOnly, async (req, res) => {
+  try {
+    const { obligacionId, monto, medio } = req.body
+    const obligacion = await prisma.obligacion.findUnique({ where: { id: obligacionId } })
+    if (!obligacion) return res.status(404).json({ message: 'Obligación no encontrada' })
+    const pago = await prisma.pago.create({
+      data: {
+        usuarioId: obligacion.usuarioId, obligacionId, monto,
+        montoCap: monto * 0.7, montoInt: monto * 0.3, montoMora: 0,
+        medio: medio || 'TRANSFERENCIA', estado: 'CONFIRMADO', confirmedAt: new Date()
+      }
+    })
+    const nuevoSaldo = Number(obligacion.saldo) - Number(pago.montoCap)
+    await prisma.obligacion.update({
+      where: { id: obligacionId },
+      data: {
+        saldo: nuevoSaldo > 0 ? nuevoSaldo : 0,
+        cuotasPagadas: obligacion.cuotasPagadas + 1,
+        estado: nuevoSaldo <= 0 ? 'CANCELADA' : obligacion.estado
+      }
+    })
+    res.json(pago)
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
