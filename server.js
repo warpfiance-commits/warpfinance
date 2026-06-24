@@ -2,6 +2,8 @@ const express  = require('express')
 const cors     = require('cors')
 const jwt      = require('jsonwebtoken')
 const bcrypt   = require('bcryptjs')
+const https    = require('https')
+const crypto   = require('crypto')
 const { PrismaClient } = require('@prisma/client')
 
 const app    = express()
@@ -9,8 +11,53 @@ const prisma = new PrismaClient()
 const SECRET = process.env.JWT_SECRET || 'warpfinance-dev-2026'
 const PORT   = process.env.PORT || 8080
 
+// ─── CLOUDINARY (misma cuenta de Warp-consultas) ────────────────────────────
+const CLOUD_NAME  = process.env.CLOUDINARY_CLOUD_NAME || 'dtoq5nbz4'
+const API_KEY      = process.env.CLOUDINARY_API_KEY    || '985348958691353'
+const API_SECRET   = process.env.CLOUDINARY_API_SECRET || 'N8mnqMCA_xVtSzxL4p13YVvhnLM'
+
 app.use(cors({ origin: (origin, cb) => cb(null, true), credentials: true }))
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
+
+// resourceType: 'auto' deja que Cloudinary detecte si es imagen, PDF, etc.
+async function uploadImageToCloudinary(base64Data, fileName, folder, resourceType = 'auto') {
+  const mimeMatch = base64Data.match(/data:([^;]+);/)
+  const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg'
+  const base64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data
+  const timestamp = Math.floor(Date.now() / 1000)
+  const publicId = `warpfinance-inventario/${folder}/${Date.now()}_${(fileName||'img').replace(/[^a-zA-Z0-9._-]/g,'_')}`
+  const signature = crypto.createHash('sha1').update(`public_id=${publicId}&timestamp=${timestamp}${API_SECRET}`).digest('hex')
+  const boundary = '----WarpBoundary' + Math.random().toString(36).substr(2)
+  const fileData = Buffer.from(base64, 'base64')
+  let body = ''
+  const addField = (n, v) => { body += `--${boundary}\r\nContent-Disposition: form-data; name="${n}"\r\n\r\n${v}\r\n` }
+  addField('api_key', API_KEY); addField('timestamp', timestamp)
+  addField('signature', signature); addField('public_id', publicId)
+  const bodyBefore = Buffer.from(body, 'utf8')
+  const fileHeader = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName||'image'}"\r\nContent-Type: ${mimeType}\r\n\r\n`, 'utf8')
+  const bodyAfter = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
+  const requestBody = Buffer.concat([bodyBefore, fileHeader, fileData, bodyAfter])
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.cloudinary.com',
+      path: `/v1_1/${CLOUD_NAME}/${resourceType}/upload`,
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': requestBody.length }
+    }
+    const req = https.request(options, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (json.secure_url) resolve(json.secure_url)
+          else reject(new Error(json.error?.message || 'Upload failed'))
+        } catch(e) { reject(e) }
+      })
+    })
+    req.on('error', reject); req.write(requestBody); req.end()
+  })
+}
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }))
@@ -385,6 +432,15 @@ app.post('/api/v1/pagos/manual', auth, adminOnly, async (req, res) => {
 })
 
 // ─── INVENTARIO ───────────────────────────────────────────────────────────────
+app.post('/api/v1/inventario/upload-imagen', auth, adminOnly, async (req, res) => {
+  try {
+    const { base64, nombre, carpeta } = req.body
+    if (!base64) return res.status(400).json({ message: 'Falta la imagen (base64)' })
+    const url = await uploadImageToCloudinary(base64, nombre || 'imagen', carpeta || 'general')
+    res.json({ url })
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 app.get('/api/v1/inventario/vehiculos', auth, async (req, res) => {
   try {
     const { estado } = req.query
