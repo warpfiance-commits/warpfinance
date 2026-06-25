@@ -4,7 +4,7 @@
   "description": "Warp Finance API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "npx prisma db push --accept-data-loss --skip-generate && node server.js",
     "postinstall": "npx prisma generate"
   },
   "dependencies": {
