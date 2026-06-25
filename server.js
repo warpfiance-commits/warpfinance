@@ -464,6 +464,24 @@ app.put('/api/v1/inventario/vehiculos/:id/reservar', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.put('/api/v1/inventario/vehiculos/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const { nombre, marca, linea, anio, color, vin, km, valor, tipo, imagenes } = req.body
+    const v = await prisma.vehiculo.update({
+      where: { id: req.params.id },
+      data: { nombre, marca, linea, anio: anio?+anio:undefined, color, vin, km: km!==undefined?+km:undefined, valor: valor!==undefined?+valor:undefined, tipo, imagenes }
+    })
+    res.json(v)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.delete('/api/v1/inventario/vehiculos/:id', auth, adminOnly, async (req, res) => {
+  try {
+    await prisma.vehiculo.delete({ where: { id: req.params.id } })
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 app.get('/api/v1/inventario/inmuebles', auth, async (req, res) => {
   try {
     const { estado } = req.query
@@ -484,6 +502,24 @@ app.put('/api/v1/inventario/inmuebles/:id/reservar', auth, async (req, res) => {
   try {
     const i = await prisma.inmueble.update({ where: { id: req.params.id }, data: { estado: 'RESERVADO' } })
     res.json(i)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.put('/api/v1/inventario/inmuebles/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const { nombre, direccion, municipio, matricula, area, areaPrivada, estrato, tipo, valor, imagenes } = req.body
+    const i = await prisma.inmueble.update({
+      where: { id: req.params.id },
+      data: { nombre, direccion, municipio, matricula, area: area!==undefined?+area:undefined, areaPrivada: areaPrivada!==undefined?+areaPrivada:undefined, estrato, tipo, valor: valor!==undefined?+valor:undefined, imagenes }
+    })
+    res.json(i)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.delete('/api/v1/inventario/inmuebles/:id', auth, adminOnly, async (req, res) => {
+  try {
+    await prisma.inmueble.delete({ where: { id: req.params.id } })
+    res.json({ ok: true })
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
