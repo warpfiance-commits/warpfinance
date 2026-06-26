@@ -170,10 +170,11 @@ app.post('/api/v1/auth/perfil-test', auth, async (req, res) => {
 // ─── USUARIOS (ADMIN) ────────────────────────────────────────────────────────
 app.get('/api/v1/usuarios', auth, adminOnly, async (req, res) => {
   try {
-    const { estado, rol, q } = req.query
+    const { estado, rol, q, kycPendiente } = req.query
     const where = {}
     if (estado) where.estado = estado
     if (rol) where.rol = rol
+    if (kycPendiente === 'true') where.kycValidado = false
     if (q) where.OR = [
       { primerNombre: { contains: q, mode: 'insensitive' } },
       { primerApellido: { contains: q, mode: 'insensitive' } },
@@ -247,6 +248,34 @@ app.put('/api/v1/usuarios/:id/kyc', auth, adminOnly, async (req, res) => {
       data: { kycValidado, sarlaftOk }
     })
     res.json(user)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.put('/api/v1/usuarios/:id/rol', auth, adminOnly, async (req, res) => {
+  try {
+    const { rol } = req.body
+    if (!['CLIENTE', 'ANALISTA', 'ADMIN', 'INVERSIONISTA'].includes(rol))
+      return res.status(400).json({ message: 'Rol inválido' })
+    const user = await prisma.usuario.update({
+      where: { id: req.params.id },
+      data: { rol }
+    })
+    res.json(user)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.post('/api/v1/usuarios/:id/activar-inversionista', auth, adminOnly, async (req, res) => {
+  try {
+    const { modalidad, montoInicial, plazoMeses } = req.body
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.params.id } })
+    if (!usuario) return res.status(404).json({ message: 'Usuario no encontrado' })
+    await prisma.usuario.update({ where: { id: req.params.id }, data: { rol: 'INVERSIONISTA' } })
+    const inversion = await prisma.inversion.upsert({
+      where: { usuarioId: req.params.id },
+      update: { modalidad, montoInicial, saldoActual: montoInicial, plazoMeses, estado: 'ACTIVA' },
+      create: { usuarioId: req.params.id, perfil: usuario.perfilInversion || 'MODERADO', modalidad: modalidad || 'FIJO', montoInicial: montoInicial || 0, saldoActual: montoInicial || 0, plazoMeses: plazoMeses || 12, pctDelegada: 70, pctDirigida: 30, estado: 'ACTIVA' }
+    })
+    res.json({ usuario: { ...usuario, rol: 'INVERSIONISTA' }, inversion })
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
@@ -381,15 +410,40 @@ app.put('/api/v1/obligaciones/:id/extrajudicial', auth, adminOnly, async (req, r
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.put('/api/v1/obligaciones/:id/debito-auto', auth, async (req, res) => {
+  try {
+    const obl = await prisma.obligacion.findUnique({ where: { id: req.params.id } })
+    if (!obl || obl.usuarioId !== req.userId) return res.status(404).json({ message: 'Obligación no encontrada' })
+    const { cuentaBanco } = req.body
+    const updated = await prisma.obligacion.update({
+      where: { id: req.params.id },
+      data: { debitoAuto: true, cuentaBanco: cuentaBanco || obl.cuentaBanco }
+    })
+    res.json(updated)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 // ─── PAGOS ───────────────────────────────────────────────────────────────────
 app.post('/api/v1/pagos', auth, async (req, res) => {
   try {
     const { obligacionId, monto, medio } = req.body
+    const obligacion = await prisma.obligacion.findUnique({ where: { id: obligacionId } })
+    if (!obligacion || obligacion.usuarioId !== req.userId) return res.status(404).json({ message: 'Obligación no encontrada' })
     const pago = await prisma.pago.create({
       data: {
         usuarioId: req.userId, obligacionId, monto,
         montoCap: monto * 0.7, montoInt: monto * 0.3, montoMora: 0,
         medio, estado: 'CONFIRMADO', confirmedAt: new Date()
+      }
+    })
+    const nuevoSaldo = Number(obligacion.saldo) - Number(pago.montoCap)
+    await prisma.obligacion.update({
+      where: { id: obligacionId },
+      data: {
+        saldo: nuevoSaldo > 0 ? nuevoSaldo : 0,
+        cuotasPagadas: obligacion.cuotasPagadas + 1,
+        estado: nuevoSaldo <= 0 ? 'CANCELADA' : (obligacion.estado === 'EN_MORA' ? 'AL_DIA' : obligacion.estado),
+        diasMora: nuevoSaldo <= 0 || obligacion.estado === 'EN_MORA' ? 0 : obligacion.diasMora
       }
     })
     res.json(pago)
