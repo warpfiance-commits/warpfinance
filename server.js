@@ -528,7 +528,7 @@ app.get('/api/v1/fondo/modalidades', auth, async (req, res) => {
   try {
     const { soloActivas } = req.query
     const where = soloActivas === 'true' ? { activa: true } : {}
-    const modalidades = await prisma.modalidadRendimiento.findMany({ where, orderBy: { createdAt: 'asc' } })
+    const modalidades = await prisma.configModalidadRendimiento.findMany({ where, orderBy: { createdAt: 'asc' } })
     res.json(modalidades)
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
@@ -536,7 +536,7 @@ app.get('/api/v1/fondo/modalidades', auth, async (req, res) => {
 app.post('/api/v1/fondo/modalidades', auth, adminOnly, async (req, res) => {
   try {
     const { nombre, tipo, icono, descripcion, tasaFija, comisionPct, cuotaManejo, retiroAnticipadoPct, activa } = req.body
-    const m = await prisma.modalidadRendimiento.create({
+    const m = await prisma.configModalidadRendimiento.create({
       data: { nombre, tipo, icono: icono || '🔒', descripcion, tasaFija: tasaFija || null, comisionPct: comisionPct ?? 15, cuotaManejo: cuotaManejo ?? 0, retiroAnticipadoPct: retiroAnticipadoPct ?? 2, activa: activa ?? true }
     })
     res.json(m)
@@ -546,7 +546,7 @@ app.post('/api/v1/fondo/modalidades', auth, adminOnly, async (req, res) => {
 app.put('/api/v1/fondo/modalidades/:id', auth, adminOnly, async (req, res) => {
   try {
     const { nombre, tipo, icono, descripcion, tasaFija, comisionPct, cuotaManejo, retiroAnticipadoPct, activa } = req.body
-    const m = await prisma.modalidadRendimiento.update({
+    const m = await prisma.configModalidadRendimiento.update({
       where: { id: req.params.id },
       data: { nombre, tipo, icono, descripcion, tasaFija: tasaFija === undefined ? undefined : (tasaFija || null), comisionPct, cuotaManejo, retiroAnticipadoPct, activa }
     })
@@ -556,7 +556,7 @@ app.put('/api/v1/fondo/modalidades/:id', auth, adminOnly, async (req, res) => {
 
 app.delete('/api/v1/fondo/modalidades/:id', auth, adminOnly, async (req, res) => {
   try {
-    await prisma.modalidadRendimiento.delete({ where: { id: req.params.id } })
+    await prisma.configModalidadRendimiento.delete({ where: { id: req.params.id } })
     res.json({ ok: true })
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
