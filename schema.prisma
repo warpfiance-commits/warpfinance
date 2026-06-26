@@ -123,7 +123,7 @@ enum TipoModalidad {
   MIXTO
 }
 
-model ModalidadRendimiento {
+model ConfigModalidadRendimiento {
   id              String        @id @default(uuid())
   nombre          String
   tipo            TipoModalidad
