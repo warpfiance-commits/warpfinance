@@ -116,6 +116,30 @@ model Documento {
   @@map("documentos")
 }
 
+// ─── MESA DE DINERO / FONDO ───────────────────────────────────────────────────
+enum TipoModalidad {
+  FIJO
+  VARIABLE
+  MIXTO
+}
+
+model ConfigModalidadRendimiento {
+  id              String        @id @default(uuid())
+  nombre          String
+  tipo            TipoModalidad
+  icono           String        @default("lock")
+  descripcion     String
+  tasaFija        Decimal?      @db.Decimal(5, 2)
+  comisionPct     Decimal       @default(15) @db.Decimal(5, 2)
+  cuotaManejo     Decimal       @default(0) @db.Decimal(12, 2)
+  retiroAnticipadoPct Decimal   @default(2) @db.Decimal(5, 2)
+  activa          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("modalidades_rendimiento")
+}
+
 // ─── INVENTARIO ───────────────────────────────────────────────────────────────
 enum EstadoInventario {
   DISPONIBLE
@@ -381,6 +405,7 @@ enum EstadoInversion {
 model Inversion {
   id              String               @id @default(uuid())
   usuarioId       String               @unique
+  accountNumber   String?              @unique
   perfil          PerfilInversion
   modalidad       ModalidadRendimiento
   montoInicial    Decimal              @db.Decimal(18, 2)
@@ -392,6 +417,8 @@ model Inversion {
   reinversion     Boolean              @default(false)
   periodicidad    String               @default("MENSUAL")
   estado          EstadoInversion      @default(EN_PROCESO)
+  documentos      Json?
+  auditLog        Json?
   rendAcumulado   Decimal              @default(0) @db.Decimal(18, 2)
   ultimoCorte     DateTime?
   createdAt       DateTime             @default(now())
