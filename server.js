@@ -147,6 +147,50 @@ app.post('/api/v1/auth/login', async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+// ─── DOCUMENTOS (self-service) ───────────────────────────────────────────────
+app.post('/api/v1/documentos/upload', auth, async (req, res) => {
+  try {
+    const { base64, nombre } = req.body
+    if (!base64) return res.status(400).json({ message: 'Falta el documento (base64)' })
+    const url = await uploadImageToCloudinary(base64, nombre || 'documento', `documentos/${req.userId}`)
+    res.json({ url })
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.post('/api/v1/documentos', auth, async (req, res) => {
+  try {
+    const { tipo, nombre, url, solicitudId } = req.body
+    if (!tipo || !url) return res.status(400).json({ message: 'Faltan campos obligatorios (tipo, url)' })
+    const documento = await prisma.documento.create({
+      data: { usuarioId: req.userId, tipo, nombre: nombre || tipo, url, solicitudId: solicitudId || null }
+    })
+    res.json(documento)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+app.get('/api/v1/documentos/mios', auth, async (req, res) => {
+  try {
+    const documentos = await prisma.documento.findMany({
+      where: { usuarioId: req.userId },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(documentos)
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
+// Auto-actualización del propio perfil (onboarding: teléfono, dirección,
+// firma digital). Distinto de PUT /usuarios/:id, que es solo para admin.
+app.put('/api/v1/auth/perfil', auth, async (req, res) => {
+  try {
+    const { telefono, direccion, firmaDigital, segundoNombre, segundoApellido } = req.body
+    const user = await prisma.usuario.update({
+      where: { id: req.userId },
+      data: { telefono, direccion, firmaDigital, segundoNombre, segundoApellido }
+    })
+    res.json({ usuario: user })
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 app.get('/api/v1/auth/perfil', auth, async (req, res) => {
   try {
     const user = await prisma.usuario.findUnique({ where: { id: req.userId } })
@@ -625,13 +669,47 @@ app.get('/api/v1/fondo/mi-inversion', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }) }
 })
 
+app.post('/api/v1/fondo/upload-documento', auth, async (req, res) => {
+  try {
+    const { base64, nombre, campo } = req.body
+    if (!base64) return res.status(400).json({ message: 'Falta el documento (base64)' })
+    const url = await uploadImageToCloudinary(base64, nombre || campo || 'documento', `inversiones/${req.userId}`)
+    res.json({ url, campo })
+  } catch (e) { res.status(500).json({ message: e.message }) }
+})
+
 app.post('/api/v1/fondo/invertir', auth, async (req, res) => {
   try {
-    const { modalidad, montoInicial, plazoMeses, pctDelegada, tasaFija } = req.body
+    const { modalidad, montoInicial, plazoMeses, pctDelegada, tasaFija, documentos } = req.body
+
+    const existente = await prisma.inversion.findUnique({ where: { usuarioId: req.userId } })
+    const accountNumber = existente?.accountNumber || (() => {
+      const now = new Date()
+      const rand = Math.floor(1000 + Math.random() * 9000)
+      return `WF-INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${rand}`
+    })()
+
+    const auditEntry = {
+      timestamp: new Date().toISOString(),
+      userId: req.userId,
+      action: 'Radicación',
+      description: 'El inversionista completó la vinculación desde la plataforma digital.'
+    }
+    const auditLog = [...(existente?.auditLog || []), auditEntry]
+
     const inv = await prisma.inversion.upsert({
       where: { usuarioId: req.userId },
-      update: { modalidad, saldoActual: montoInicial, montoInicial, plazoMeses, pctDelegada, pctDirigida: 100 - pctDelegada, tasaFija, estado: 'ACTIVA' },
-      create: { usuarioId: req.userId, perfil: 'MODERADO', modalidad, montoInicial, saldoActual: montoInicial, plazoMeses, pctDelegada: pctDelegada || 70, pctDirigida: 100 - (pctDelegada || 70), tasaFija, estado: 'ACTIVA' }
+      update: {
+        modalidad, saldoActual: montoInicial, montoInicial, plazoMeses,
+        pctDelegada, pctDirigida: 100 - pctDelegada, tasaFija,
+        accountNumber, documentos: documentos || {}, auditLog,
+        estado: 'EN_PROCESO'
+      },
+      create: {
+        usuarioId: req.userId, perfil: 'MODERADO', modalidad, montoInicial, saldoActual: montoInicial,
+        plazoMeses, pctDelegada: pctDelegada || 70, pctDirigida: 100 - (pctDelegada || 70), tasaFija,
+        accountNumber, documentos: documentos || {}, auditLog, estado: 'EN_PROCESO'
+      }
     })
     res.json(inv)
   } catch (e) { res.status(500).json({ message: e.message }) }
